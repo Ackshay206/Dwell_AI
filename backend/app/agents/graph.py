@@ -9,7 +9,7 @@ Note: VisionNode and RenderNode are placeholders for Developer A's work.
 
 from typing import Literal
 from langgraph.graph import StateGraph, END
-
+from app.agents.vision_node import vision_node
 from app.models.state import AgentState, create_initial_state
 from app.models.room import RoomObject, RoomDimensions
 from app.agents.constraint_node import constraint_node
