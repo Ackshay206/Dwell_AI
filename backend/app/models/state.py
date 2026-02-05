@@ -3,9 +3,14 @@ Agent State
 
 Defines the shared state passed between LangGraph nodes.
 This is the "memory" of the agent as it processes a room.
+
+UPGRADED for generative design workflow:
+- layout_variations: Multiple layout options from Designer
+- output_image_base64: Perspective render output
+- edit_command: Chat-based editing commands
 """
 
-from typing import TypedDict, List, Optional, Annotated
+from typing import TypedDict, List, Optional, Annotated, Dict, Any
 import operator
 
 from app.models.room import RoomObject, RoomDimensions, ConstraintViolation, LayoutScore
@@ -16,6 +21,7 @@ class AgentState(TypedDict):
     Shared state for the LangGraph workflow.
     
     This state is passed between nodes and updated at each step.
+    Supports both legacy deterministic optimization and new generative design.
     """
     
     # === Input ===
@@ -24,8 +30,12 @@ class AgentState(TypedDict):
     
     # === Layout State ===
     original_layout: List[RoomObject]           # Initial detected layout
-    current_layout: List[RoomObject]            # Layout being optimized
+    current_layout: List[RoomObject]            # Layout being optimized/edited
     locked_object_ids: List[str]                # User-locked objects
+    
+    # === Generative Design (NEW) ===
+    layout_variations: Optional[List[Dict[str, Any]]]  # 2-3 layout options from Designer
+    selected_variation_index: Optional[int]     # Which variation user selected (0, 1, or 2)
     
     # === Constraint Results ===
     constraint_violations: Annotated[List[ConstraintViolation], operator.add]
@@ -41,7 +51,12 @@ class AgentState(TypedDict):
     # === Output ===
     proposed_layout: Optional[List[RoomObject]] # Final optimized layout
     explanation: str                            # Human-readable explanation
-    output_image_url: Optional[str]             # Rendered result image
+    output_image_url: Optional[str]             # Rendered result image URL
+    output_image_base64: Optional[str]          # Rendered perspective image (NEW)
+    
+    # === Chat Editing (NEW) ===
+    edit_command: Optional[str]                 # Natural language edit command
+    edit_history: Optional[List[str]]           # History of edit commands
     
     # === Control ===
     should_continue: bool                       # Whether to keep iterating
@@ -74,6 +89,8 @@ def create_initial_state(
         original_layout=objects.copy(),
         current_layout=objects.copy(),
         locked_object_ids=locked_ids or [],
+        layout_variations=None,
+        selected_variation_index=None,
         constraint_violations=[],
         iteration_count=0,
         max_iterations=max_iterations,
@@ -82,6 +99,10 @@ def create_initial_state(
         proposed_layout=None,
         explanation="",
         output_image_url=None,
+        output_image_base64=None,
+        edit_command=None,
+        edit_history=None,
         should_continue=True,
         error=None
     )
+

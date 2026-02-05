@@ -56,27 +56,27 @@ export function ImageUpload({
         <div
             {...getRootProps()}
             className={`
-        relative min-h-[300px] rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer
+        relative min-h-[350px] rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         ${isDragActive
-                    ? 'border-blue-500 bg-blue-500/10'
+                    ? 'border-[#6b7aa1] bg-[#6b7aa1]/10'
                     : preview
-                        ? 'border-slate-600 bg-slate-800/50'
-                        : 'border-slate-600 hover:border-blue-400 bg-slate-800/30 hover:bg-slate-800/50'
+                        ? 'border-gray-200 bg-white'
+                        : 'border-gray-300 hover:border-[#6b7aa1] bg-gray-50 hover:bg-white'
                 }
       `}
         >
             <input {...getInputProps()} />
 
             {preview ? (
-                <div className="relative w-full h-full min-h-[300px] group">
+                <div className="relative w-full h-full min-h-[350px] group">
                     <img
                         src={preview}
-                        alt="Room preview"
-                        className="w-full h-full object-contain rounded-lg"
+                        alt="Floor plan preview"
+                        className="w-full h-full object-contain rounded-xl p-2"
                     />
                     {!disabled && (
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
                             <div className="text-center">
                                 <ImageIcon className="w-10 h-10 mx-auto mb-2 text-white" />
                                 <p className="text-white font-medium">Click or drop to change image</p>
@@ -86,21 +86,21 @@ export function ImageUpload({
                     {!disabled && (
                         <button
                             onClick={clearImage}
-                            className="absolute top-2 right-2 p-2 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                            className="absolute top-3 right-3 p-2 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
                         >
                             <X className="w-4 h-4 text-white" />
                         </button>
                     )}
                 </div>
             ) : (
-                <div className="flex flex-col items-center justify-center h-full min-h-[300px] p-8">
-                    <div className={`p-4 rounded-full mb-4 ${isDragActive ? 'bg-blue-500/20' : 'bg-slate-700'}`}>
-                        <Upload className={`w-10 h-10 ${isDragActive ? 'text-blue-400' : 'text-slate-400'}`} />
+                <div className="flex flex-col items-center justify-center h-full min-h-[350px] p-8">
+                    <div className={`p-4 rounded-full mb-4 ${isDragActive ? 'bg-[#6b7aa1]/20' : 'bg-gray-100'}`}>
+                        <Upload className={`w-10 h-10 ${isDragActive ? 'text-[#6b7aa1]' : 'text-gray-400'}`} />
                     </div>
-                    <p className="text-lg font-medium text-slate-200 mb-2">
-                        {isDragActive ? 'Drop your bedroom image here' : 'Drop bedroom image here'}
+                    <p className="text-lg font-medium text-gray-700 mb-2">
+                        {isDragActive ? 'Drop your floor plan here' : 'Drop floor plan image here'}
                     </p>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-gray-400">
                         or click to browse (JPEG, PNG, WebP • Max 10MB)
                     </p>
                 </div>

@@ -10,6 +10,10 @@ import type {
     OptimizeResponse,
     RenderRequest,
     RenderResponse,
+    PerspectiveRequest,
+    PerspectiveResponse,
+    ChatEditRequest,
+    ChatEditResponse,
 } from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -19,7 +23,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    timeout: 60000, // 60 second timeout for vision processing
+    timeout: 120000, // 120 second timeout for perspective generation
 });
 
 // Error handler
@@ -70,6 +74,30 @@ export async function renderLayout(request: RenderRequest): Promise<RenderRespon
 }
 
 /**
+ * Generate a photorealistic perspective view of the layout
+ */
+export async function generatePerspective(request: PerspectiveRequest): Promise<PerspectiveResponse> {
+    try {
+        const response = await api.post<PerspectiveResponse>('/render/perspective', request);
+        return response.data;
+    } catch (error) {
+        handleApiError(error);
+    }
+}
+
+/**
+ * Process a chat edit command
+ */
+export async function chatEdit(request: ChatEditRequest): Promise<ChatEditResponse> {
+    try {
+        const response = await api.post<ChatEditResponse>('/chat/edit', request);
+        return response.data;
+    } catch (error) {
+        handleApiError(error);
+    }
+}
+
+/**
  * Check backend health
  */
 export async function checkHealth(): Promise<{ status: string; version: string }> {
@@ -80,3 +108,4 @@ export async function checkHealth(): Promise<{ status: string; version: string }
         handleApiError(error);
     }
 }
+

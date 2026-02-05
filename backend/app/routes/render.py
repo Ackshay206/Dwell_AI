@@ -2,18 +2,69 @@
 Render Route
 
 POST /render - Generate an edited image with the optimized layout.
+POST /render/perspective - Generate a photorealistic perspective view.
 Uses Gemini image editing to visualize furniture movements.
 """
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
 import asyncio
 
 from app.models.api import RenderRequest, RenderResponse
-from app.models.room import RoomObject
-from app.agents.render_node import ImageEditor, EditMask
+from app.models.room import RoomObject, RoomDimensions
+from app.tools.edit_image import EditImageTool
+from app.agents.perspective_node import PerspectiveGenerator
 
 
 router = APIRouter(prefix="/render", tags=["Rendering"])
+
+
+class PerspectiveRequest(BaseModel):
+    """Request body for perspective generation."""
+    layout: List[RoomObject]
+    room_dimensions: RoomDimensions
+    style: str = "modern"
+    view_angle: str = "corner"
+
+
+class PerspectiveResponse(BaseModel):
+    """Response from perspective generation."""
+    image_base64: Optional[str] = None
+    message: str
+
+
+@router.post("/perspective", response_model=PerspectiveResponse)
+async def generate_perspective(request: PerspectiveRequest) -> PerspectiveResponse:
+    """
+    Generate a photorealistic perspective view of the room layout.
+    
+    Uses Gemini image generation to create an eye-level view
+    of the room based on the furniture layout.
+    """
+    try:
+        generator = PerspectiveGenerator()
+        
+        image_base64 = await generator.generate_side_view(
+            layout=request.layout,
+            room_dims=request.room_dimensions,
+            style=request.style,
+            view_angle=request.view_angle,
+            lighting="natural daylight"
+        )
+        
+        return PerspectiveResponse(
+            image_base64=image_base64,
+            message="Perspective view generated successfully"
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Perspective generation failed: {str(e)}"
+        )
+
+
 
 
 @router.post("", response_model=RenderResponse)
@@ -48,40 +99,33 @@ async def render_layout(request: RenderRequest) -> RenderResponse:
             message="No changes to render. Layout is unchanged."
         )
     
-    # Generate edit instructions from layout changes
-    edit_masks = []
-    for change in changes:
-        # Create an instruction describing the furniture movement
-        instruction = (
-            f"Move the {change['label']} from its current position "
-            f"to the new location. Keep the same furniture style and lighting."
-        )
-        
-        # For now, we'll use a simple region description
-        # In a full implementation, we'd generate actual mask images
-        edit_masks.append(EditMask(
-            region_mask=request.original_image_base64[:100] + "==",  # Placeholder mask
-            instruction=instruction
-        ))
-    
     # Try to apply edits using Gemini
     try:
-        editor = ImageEditor()
+        editor = EditImageTool()
+        current_image = request.original_image_base64
         
-        # Apply surgical edits
-        edited_image_base64 = await editor.apply_edits(
-            base_image=request.original_image_base64,
-            masks=edit_masks
-        )
+        change_descriptions = []
         
-        change_descriptions = [
-            f"Moved {c['label']} from ({c['from'][0]}, {c['from'][1]}) to ({c['to'][0]}, {c['to'][1]})"
-            for c in changes
-        ]
+        for change in changes:
+            # Create an instruction describing the furniture movement
+            instruction = (
+                f"Move the {change['label']} from its current position "
+                f"to the new location. Keep the same furniture style and lighting."
+            )
+            
+            # Apply edit
+            current_image = await editor.edit_image(
+                base_image=current_image,
+                instruction=instruction
+            )
+            
+            change_descriptions.append(
+                f"Moved {change['label']} from ({change['from'][0]}, {change['from'][1]}) to ({change['to'][0]}, {change['to'][1]})"
+            )
         
         return RenderResponse(
             image_url=None,
-            image_base64=edited_image_base64,
+            image_base64=current_image,
             message=f"Applied {len(changes)} change(s): " + "; ".join(change_descriptions)
         )
         

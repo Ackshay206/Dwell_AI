@@ -7,7 +7,7 @@ rooms, furniture objects, and their properties. They serve as the
 """
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 
@@ -19,8 +19,8 @@ class ObjectType(str, Enum):
 
 class RoomDimensions(BaseModel):
     """Estimated dimensions of the room in pixels/units."""
-    width_estimate: int = Field(..., gt=0, description="Room width")
-    height_estimate: int = Field(..., gt=0, description="Room height")
+    width_estimate: float = Field(..., gt=0, description="Room width")
+    height_estimate: float = Field(..., gt=0, description="Room height")
 
 
 class RoomObject(BaseModel):
@@ -32,15 +32,26 @@ class RoomObject(BaseModel):
         label: Human-readable name (e.g., "bed", "desk")
         bbox: Bounding box as [x, y, width, height]
         type: Whether the object is movable or structural
-        orientation: Rotation in degrees (0, 90, 180, 270)
+        orientation: Rotation in degrees (0=North, 90=East, 180=South, 270=West)
         is_locked: Whether the user has locked this object in place
+        z_index: Depth ordering (0=floor/rugs, 1=furniture, 2=ceiling)
+        material_hint: Material type for rendering (wooden, fabric, metal, glass)
+        footprint_polygon: Optional precise polygon for L-shaped/curved objects
     """
     id: str = Field(..., description="Unique object ID")
     label: str = Field(..., description="Object type label")
     bbox: List[int] = Field(..., min_length=4, max_length=4, description="[x, y, width, height]")
     type: ObjectType = Field(default=ObjectType.MOVABLE)
-    orientation: int = Field(default=0, ge=0, lt=360)
+    orientation: int = Field(default=0, ge=0, lt=360, description="0=North, 90=East, 180=South, 270=West")
     is_locked: bool = Field(default=False, description="User-locked status")
+    
+    # NEW FIELDS for 3D floor plan understanding
+    z_index: int = Field(default=1, ge=0, le=2, description="0=floor/rugs, 1=furniture, 2=ceiling")
+    material_hint: Optional[str] = Field(None, description="e.g., 'wooden', 'fabric', 'glass', 'metal'")
+    footprint_polygon: Optional[List[Tuple[float, float]]] = Field(
+        None, 
+        description="Optional precise polygon for L-shaped/curved objects as [(x1,y1), (x2,y2), ...]"
+    )
     
     @property
     def x(self) -> int:
@@ -77,6 +88,10 @@ class VisionOutput(BaseModel):
     """
     room_dimensions: RoomDimensions
     objects: List[RoomObject]
+    wall_bounds: Optional[List[int]] = Field(
+        default=None, 
+        description="Interior wall boundaries as [x, y, width, height]"
+    )
 
 
 class ConstraintViolation(BaseModel):

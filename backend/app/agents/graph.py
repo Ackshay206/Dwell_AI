@@ -1,141 +1,154 @@
-"""
-LangGraph Workflow
-
-Main agent workflow that orchestrates the optimization process:
-VisionNode → ConstraintNode → SolverNode → (loop) → Output
-
-Note: VisionNode and RenderNode are placeholders for Developer A's work.
-
-LangSmith Tracing:
-    Set these environment variables to enable tracing:
-    - LANGCHAIN_TRACING_V2=true
-    - LANGCHAIN_API_KEY=your_key
-    - LANGCHAIN_PROJECT=pocket-planner
-"""
+# app/agents/graph.py
 
 import os
-from typing import Literal
+import asyncio
+from typing import Literal, Dict, Any
 from langgraph.graph import StateGraph, END
 
 from app.models.state import AgentState, create_initial_state
 from app.models.room import RoomObject, RoomDimensions
-from app.agents.constraint_node import constraint_node
-from app.agents.solver_node import solver_node, generate_optimization_summary
+from app.agents.designer_node import designer_node_sync
+from app.agents.perspective_node import perspective_node_sync
+from app.agents.chat_editor_node import chat_editor_node_sync
 
 
 # LangSmith tracing is automatically enabled when these env vars are set
 # No additional code needed - LangGraph integrates with LangSmith automatically
 
 
-# ============ Placeholder Nodes (Developer A will implement) ============
+# ============ Vision Node (Upgraded) ============
 
 def vision_node(state: AgentState) -> dict:
     """
-    Placeholder for Vision Node.
+    Vision Node - Placeholder that assumes vision extraction is done.
     
-    Developer A will implement this to:
-    1. Send image to Gemini 1.5 Pro Vision
-    2. Extract room dimensions and objects
-    3. Return structured JSON
+    The actual VisionExtractor is called from the API endpoint before
+    the graph is invoked, as it requires async image processing.
     
-    For now, we assume current_layout is already populated.
+    This node validates the vision output and prepares for the designer.
     """
+    # Validate we have required data
+    if not state.get("current_layout"):
+        return {
+            "error": "No layout data from vision extraction",
+            "should_continue": False
+        }
+    
     return {
-        "explanation": "Vision analysis complete (placeholder)"
+        "explanation": "Vision analysis complete. Room layout extracted.",
+        "should_continue": True
     }
 
+
+# ============ Render Node (Upgraded) ============
 
 def render_node(state: AgentState) -> dict:
     """
-    Placeholder for Render Node.
+    Render Node - Wrapper for perspective generation.
     
-    Developer A will implement this to:
-    1. Generate image edit prompts
-    2. Use Gemini to move furniture in the image
-    3. Return the edited image URL
-    
-    For now, we just finalize the state.
+    For synchronous LangGraph execution, wraps the async perspective generator.
     """
-    summary = generate_optimization_summary(state)
-    
-    return {
-        "proposed_layout": state["current_layout"],
-        "explanation": summary,
-        "output_image_url": None  # Will be set by Developer A
-    }
+    return perspective_node_sync(state)
 
 
 # ============ Router Functions ============
 
-def should_continue_optimization(state: AgentState) -> Literal["solver", "render"]:
+def should_continue_optimization(state: AgentState) -> Literal["designer", "render"]:
     """
-    Decide whether to continue optimizing or render the result.
+    Decide whether to generate new layouts or render results.
     
-    Returns:
-        "solver" to continue optimization
-        "render" to finalize and render
+    In the new generative flow, we typically go straight to designer
+    unless we already have layout variations.
     """
-    if state.get("should_continue", False):
-        return "solver"
+    if state.get("layout_variations"):
+        return "render"
+    if state.get("should_continue", True):
+        return "designer"
     return "render"
 
 
-def check_for_errors(state: AgentState) -> Literal["constraint", "error"]:
+def check_for_errors(state: AgentState) -> Literal["designer", "error"]:
     """Check if there's an error in the state."""
     if state.get("error"):
         return "error"
-    return "constraint"
+    return "designer"
 
 
-# ============ Graph Definition ============
+def should_continue_editing(state: AgentState) -> Literal["render", "end"]:
+    """Decide if we need to re-render after chat edits."""
+    if state.get("edit_command") and state.get("should_continue", False):
+        return "render"
+    return "end"
+
+
+# ============ Graph Definitions ============
 
 def create_optimization_graph() -> StateGraph:
     """
-    Create the LangGraph workflow for room optimization.
+    Create the NEW generative design LangGraph workflow.
     
-    Flow:
-        START → vision → constraint → solver ←→ constraint → render → END
-                                         ↓
-                                    (loop until no violations or max iterations)
+    New Flow:
+        START → vision → designer → render → END
+        
+    The designer generates 2-3 layout variations.
+    Frontend displays options, user selects one.
+    Selected layout triggers render for perspective view.
     """
     # Create graph with AgentState
     graph = StateGraph(AgentState)
     
     # Add nodes
     graph.add_node("vision", vision_node)
-    graph.add_node("constraint", constraint_node)
-    graph.add_node("solver", solver_node)
+    graph.add_node("designer", designer_node_sync)
     graph.add_node("render", render_node)
     
-    # Define edges
+    # Define edges - simple linear flow for now
     graph.set_entry_point("vision")
+    graph.add_edge("vision", "designer")
+    graph.add_edge("designer", "render")
+    graph.add_edge("render", END)
     
-    # vision → constraint
-    graph.add_edge("vision", "constraint")
+    return graph
+
+
+def create_editing_graph() -> StateGraph:
+    """
+    Create a graph for conversational editing workflow.
     
-    # constraint → solver OR render (conditional)
+    Flow:
+        START → chat_editor → (render if needed) → END
+    """
+    graph = StateGraph(AgentState)
+    
+    graph.add_node("chat_editor", chat_editor_node_sync)
+    graph.add_node("render", render_node)
+    
+    graph.set_entry_point("chat_editor")
+    
     graph.add_conditional_edges(
-        "constraint",
-        should_continue_optimization,
-        {
-            "solver": "solver",
-            "render": "render"
-        }
+        "chat_editor",
+        should_continue_editing,
+        {"render": "render", "end": END}
     )
     
-    # solver → constraint (loop back)
-    graph.add_edge("solver", "constraint")
-    
-    # render → END
     graph.add_edge("render", END)
     
     return graph
 
 
 def compile_graph():
-    """Compile the optimization graph for execution."""
+    """
+    Compile the optimization graph for execution.
+    """
     graph = create_optimization_graph()
     return graph.compile()
+
+
+def compile_editing_graph():
+    """Compile the editing graph for chat-based modifications."""
+    graph = create_editing_graph()
+    return graph.compile()
+
 
 
 # ============ Execution Helpers ============

@@ -11,7 +11,7 @@ import logging
 
 from app.models.api import AnalyzeRequest, AnalyzeResponse
 from app.core.constraints import check_all_hard_constraints
-from app.core.vision_service import analyze_room_image
+from app.agents.vision_node import VisionAgent
 
 
 logger = logging.getLogger(__name__)
@@ -30,8 +30,9 @@ async def analyze_room(request: AnalyzeRequest) -> AnalyzeResponse:
     4. Returns structured layout data
     """
     try:
-        # Call Gemini Vision
-        vision_output = await analyze_room_image(request.image_base64)
+        # Call Gemini Vision (via VisionAgent)
+        agent = VisionAgent()
+        vision_output = await agent.analyze_room(request.image_base64)
         
         # Check for initial issues
         violations = check_all_hard_constraints(
@@ -45,6 +46,7 @@ async def analyze_room(request: AnalyzeRequest) -> AnalyzeResponse:
         return AnalyzeResponse(
             room_dimensions=vision_output.room_dimensions,
             objects=vision_output.objects,
+            wall_bounds=vision_output.wall_bounds,
             detected_issues=detected_issues,
             message=f"Detected {len(vision_output.objects)} objects. {len(detected_issues)} issue(s) found."
         )

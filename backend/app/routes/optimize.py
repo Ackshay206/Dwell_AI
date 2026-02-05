@@ -1,36 +1,55 @@
 """
 Optimize Route
 
-POST /optimize - Optimize a room layout while respecting locked objects.
+POST /optimize - Optimize a room layout with AI-powered design variations.
 This is the core endpoint that uses our LangGraph workflow.
+
+UPGRADED for generative design:
+- Generates 2-3 layout variations using LLM
+- Supports legacy single-layout mode for backwards compatibility
 """
 
-from fastapi import APIRouter, HTTPException
+import os
+import asyncio
+from fastapi import APIRouter, HTTPException, Query
 
-from app.models.api import OptimizeRequest, OptimizeResponse
-from app.models.room import ConstraintViolation
-from app.agents.graph import run_optimization
-from app.core.constraints import check_all_hard_constraints
+from app.models.api import OptimizeRequest, OptimizeResponse, LayoutVariation
+from app.models.api import OptimizeRequest, OptimizeResponse, LayoutVariation
+from app.agents.designer_node import InteriorDesignerAgent
+from app.core.scoring import score_layout
+
+# LangSmith tracing - import for automatic instrumentation
+try:
+    from langsmith import traceable
+    LANGSMITH_ENABLED = True
+except ImportError:
+    LANGSMITH_ENABLED = False
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 
 router = APIRouter(prefix="/optimize", tags=["Optimization"])
 
 
 @router.post("", response_model=OptimizeResponse)
-async def optimize_layout(request: OptimizeRequest) -> OptimizeResponse:
+@traceable(name="optimize_layout", run_type="chain")
+async def optimize_layout(
+    request: OptimizeRequest
+) -> OptimizeResponse:
     """
-    Optimize a room layout while respecting locked objects.
+    Optimize a room layout with AI-powered design variations.
     
     This endpoint:
     1. Takes current layout and locked object IDs
-    2. Runs the LangGraph optimization workflow
-    3. Returns optimized layout with explanation
+    2. Generates 2-3 layout variations using AI
+    3. Returns variations with explanations and scores
     
-    The optimizer will:
-    - Check all constraints (door clearance, overlaps, walking paths)
-    - Move unlocked furniture to fix violations
-    - Iterate until violations are resolved or max iterations reached
-    - Generate human-readable explanation of changes
+    The AI Designer will generate:
+    - Flow Optimized: Maximize walking space
+    - Zoned Living: Distinct functional zones  
+    - Creative: Bold, unconventional arrangement
     """
     try:
         # Mark locked objects
@@ -38,41 +57,43 @@ async def optimize_layout(request: OptimizeRequest) -> OptimizeResponse:
             if obj.id in request.locked_ids:
                 obj.is_locked = True
         
-        # Run the optimization workflow
-        result = run_optimization(
-            objects=request.current_layout,
-            room_width=request.room_dimensions.width_estimate,
-            room_height=request.room_dimensions.height_estimate,
+        # Use AI Designer for variations
+        designer = InteriorDesignerAgent()
+        variations_data = await designer.generate_layout_variations(
+            current_layout=request.current_layout,
+            room_dims=request.room_dimensions,
             locked_ids=request.locked_ids,
-            max_iterations=request.max_iterations
+            image_base64=request.image_base64
         )
         
-        # Extract results
-        new_layout = result.get("proposed_layout", request.current_layout)
-        current_score = result.get("current_score")
-        initial_score = result.get("initial_score")
-        iterations = result.get("iteration_count", 0)
-        explanation = result.get("explanation", "Optimization complete.")
+        # Convert to LayoutVariation models
+        variations = []
+        for var in variations_data:
+            layout_score_obj = score_layout(
+                var["layout"],
+                int(request.room_dimensions.width_estimate),
+                int(request.room_dimensions.height_estimate)
+            )
+            variations.append(LayoutVariation(
+                name=var["name"],
+                description=var["description"],
+                layout=var["layout"],
+                score=layout_score_obj.total_score
+            ))
         
-        # Calculate improvement
-        improvement = 0.0
-        if current_score and initial_score:
-            improvement = current_score.total_score - initial_score.total_score
-        
-        # Get remaining violations
-        violations = check_all_hard_constraints(
-            new_layout,
-            request.room_dimensions.width_estimate,
-            request.room_dimensions.height_estimate
-        )
+        # Get best variation for legacy fields (if needed by frontend)
+        best_variation = variations[0] if variations else None
         
         return OptimizeResponse(
-            new_layout=new_layout,
-            explanation=explanation,
-            layout_score=current_score.total_score if current_score else 0.0,
-            iterations=iterations,
-            constraint_violations=violations,
-            improvement=round(improvement, 1)
+            variations=variations,
+            message=f"Generated {len(variations)} layout variations using AI design principles.",
+            # Legacy fields for backwards compatibility
+            new_layout=best_variation.layout if best_variation else request.current_layout,
+            explanation=best_variation.description if best_variation else "No variations generated",
+            layout_score=best_variation.score if best_variation else 0.0,
+            iterations=1,
+            constraint_violations=[],
+            improvement=0.0
         )
         
     except Exception as e:
@@ -80,14 +101,3 @@ async def optimize_layout(request: OptimizeRequest) -> OptimizeResponse:
             status_code=500,
             detail=f"Optimization failed: {str(e)}"
         )
-
-
-@router.post("/quick", response_model=OptimizeResponse)
-async def quick_optimize(request: OptimizeRequest) -> OptimizeResponse:
-    """
-    Quick optimization with fewer iterations.
-    
-    Same as /optimize but limited to 2 iterations for faster response.
-    """
-    request.max_iterations = 2
-    return await optimize_layout(request)

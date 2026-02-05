@@ -1,5 +1,7 @@
 /**
  * TypeScript types matching backend Pydantic schemas
+ * 
+ * Simplified for Generative Interior Design Agent
  */
 
 export type ObjectType = 'movable' | 'structural';
@@ -7,10 +9,13 @@ export type ObjectType = 'movable' | 'structural';
 export interface RoomObject {
   id: string;
   label: string;
-  bbox: [number, number, number, number]; // [x, y, width, height] in pixels
+  bbox: [number, number, number, number]; // [x, y, width, height] in pixels/percentage
   type: ObjectType;
-  orientation: number;
+  orientation: number; // 0=North, 90=East, 180=South, 270=West
   is_locked: boolean;
+  // Fields for 3D understanding
+  z_index?: number; // 0=floor, 1=furniture, 2=ceiling
+  material_hint?: string | null; // wooden, fabric, metal, glass
 }
 
 export interface RoomDimensions {
@@ -34,6 +39,7 @@ export interface AnalyzeRequest {
 export interface AnalyzeResponse {
   room_dimensions: RoomDimensions;
   objects: RoomObject[];
+  wall_bounds: [number, number, number, number] | null;
   detected_issues: string[];
   message: string;
 }
@@ -43,13 +49,25 @@ export interface OptimizeRequest {
   locked_ids: string[];
   room_dimensions: RoomDimensions;
   max_iterations?: number;
+  image_base64?: string;
+}
+
+// Layout variation from AI Designer
+export interface LayoutVariation {
+  name: string; // "Flow Optimized", "Zoned Living", "Creative"
+  description: string; // Design rationale
+  layout: RoomObject[];
+  thumbnail_base64?: string | null;
+  score?: number | null; // 0-100
 }
 
 export interface OptimizeResponse {
-  new_layout: RoomObject[];
-  explanation: string;
-  layout_score: number;
-  iterations: number;
+  variations: LayoutVariation[]; // 2-3 layout options
+  message: string;
+  new_layout?: RoomObject[] | null;
+  explanation?: string | null;
+  layout_score?: number | null;
+  iterations?: number | null;
   constraint_violations: ConstraintViolation[];
   improvement: number;
 }
@@ -66,58 +84,6 @@ export interface RenderResponse {
   message: string;
 }
 
-// === Frontend State ===
-
-export interface ClearanceZone {
-  object_id: string;
-  bounds: [number, number, number, number];
-  type: string;
-}
-
-export interface Overlays {
-  walking_paths?: number[][];
-  clearance_zones?: ClearanceZone[];
-}
-
-export interface AppState {
-  // Image
-  image: string | null;
-  imageId: string | null;
-  renderedImage: string | null; // After optimization render
-  showComparison: boolean; // Show before/after view
-
-  // Room data
-  roomDimensions: RoomDimensions | null;
-  objects: RoomObject[];
-  originalObjects: RoomObject[]; // For comparison
-
-  // Selection
-  selectedObjectId: string | null;
-  lockedObjectIds: string[];
-
-  // Loading states
-  isAnalyzing: boolean;
-  isOptimizing: boolean;
-  isRendering: boolean;
-
-  // Results
-  explanation: string;
-  violations: string[];
-  layoutScore: number | null;
-
-  // Overlays
-  overlays: Overlays;
-
-  // Edit mode
-  maskMode: boolean;
-  editMasks: EditMask[];
-}
-
-export interface EditMask {
-  region_mask: string; // base64 PNG
-  instruction: string;
-}
-
 // === Object Icons ===
 export const OBJECT_ICONS: Record<string, string> = {
   bed: '🛏️',
@@ -128,9 +94,47 @@ export const OBJECT_ICONS: Record<string, string> = {
   wardrobe: '🚪',
   nightstand: '🛋️',
   dresser: '🗄️',
+  sofa: '🛋️',
+  table: '🪑',
+  rug: '🟫',
+  lamp: '💡',
+  closet: '🚪',
   default: '📦'
 };
 
 export function getObjectIcon(label: string): string {
   return OBJECT_ICONS[label.toLowerCase()] || OBJECT_ICONS.default;
 }
+
+// === App Stage ===
+export type AppStage = 'analyze' | 'layouts' | 'perspective' | 'chat';
+
+// === Chat Edit Types ===
+export interface ChatEditRequest {
+  command: string;
+  current_layout: RoomObject[];
+  room_dimensions: RoomDimensions;
+  current_image_base64?: string;
+}
+
+export interface ChatEditResponse {
+  edit_type: 'layout' | 'cosmetic' | 'error';
+  updated_layout: RoomObject[];
+  updated_image_base64: string | null;
+  explanation: string;
+  needs_rerender: boolean;
+}
+
+// === Perspective Types ===
+export interface PerspectiveRequest {
+  layout: RoomObject[];
+  room_dimensions: RoomDimensions;
+  style?: string;
+  view_angle?: string;
+}
+
+export interface PerspectiveResponse {
+  image_base64: string | null;
+  message: string;
+}
+
