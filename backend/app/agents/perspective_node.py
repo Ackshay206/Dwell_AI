@@ -203,8 +203,8 @@ CRITICAL RULES:
    - CRITICAL: Any solid line must be treated as room dividing walls and must not be moved. The walls must be complete and connected to ceiling and floor.
 
 3. CONTENT FIDELITY:
-   - Include EVERY piece of furniture from the plan and do not move them from their original positions.
-   - Place them and orient them EXACTLY as shown in the layout relative to the walls.
+   - VISIBILITY: Include the whatever number of objects in the layout visible from the camera angle. Its fine to exclude items hidden by room-dividing walls.
+   - POSITION: Do NOT move any furniture from their original positions. Place and orient them EXACTLY as shown in the plan.
    - CRITICAL: Do NOT move or reorient the kitchen area or bathroom area fixtures.
    - Style: {style}.
    - Lighting: {lighting}.

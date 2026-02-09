@@ -153,26 +153,28 @@ Detect ANY additional furniture or decor items visible in the image that are NOT
 For each new item found, create a new entry with a unique ID (e.g., "detected_plant_1").
 
 TASK 2 — Write a Google Shopping search query for each item (original + detected):
-Convert the generic label to a specific product name with style, material, color, and size based on the image style.
-Examples of good conversions:
-- "bed" → "queen size walnut platform bed frame"
-- "desk" → "48 inch white oak writing desk"
-- "nightstand" → "2-drawer walnut bedside table"
-- "sofa" → "3-seater gray linen sofa"
-- "lamp" → "brass adjustable table lamp"
-- "rug" → "5x7 neutral wool area rug"
-- "wardrobe" → "2-door oak wardrobe 72 inch"
-- "chair" → "ergonomic mesh office chair"
-- "dresser" → "6-drawer walnut dresser"
-- "coffee_table" → "round walnut coffee table"
-- "detected_plant_1" → "artificial fiddle leaf fig tree 6ft"
+Generate a Google Shopping search query. The specificity depends on the item category, but MUST always be specific enough to find a real product (never generic).
+
+1. KEY FURNITURE (Bed, Sofa, Desk, Wardrobe, Dining Table):
+   - HIGH SPECIFICITY. Include precise style, material, color, size, and defining features.
+   - Example: "Bed" → "Queen size walnut platform bed frame"
+
+2. SECONDARY FURNITURE (Nightstand, Chair, Coffee Table, Dresser):
+   - MODERATE SPECIFICITY. Include style, material, color, and main dimension.
+   - Example: "Nightstand" → "White oak bedside table with drawers"
+
+3. DECOR / ACCESSORIES (Rug, Lamp, Plant, Artwork):
+   - LOW SPECIFICITY. Focus on style, color, type, and size.
+   - Example: "Plant" → "Artificial fiddle leaf fig tree"
+
+Examples of POOR/GENERIC queries (AVOID THESE): "bed", "blue sofa", "wooden table", "plant".
 
 TASK 3 — Allocate ${total_budget:.2f} across ALL items (original + detected) proportionally:
-- Prioritize key furniture (Bed, Sofa, Desk) (~50% of budget divided equally)
-- Secondary furniture (Tables, Chairs, Dressers) (~40% of budget )
-- Decor/Accessories (Plants, Rugs, Lamps) (~20% of budget)
+- Prioritize key furniture (Bed, Sofa, Desk) (~70% of budget divided equally)
+- Secondary furniture (Tables, Chairs, Dressers) (~60% of budget )
+- Decor/Accessories (Plants, Rugs, Lamps) (~30% of budget)
 
-Budgets MUST sum to exactly ${total_budget:.2f}.
+Total estimated cost MUST sum to exactly plus or minus 10% of ${total_budget:.2f}.
 
 Return ONLY a JSON array with ALL objects (original items + detected items):
 [
@@ -184,13 +186,13 @@ RULES:
 - Every original item from the input list MUST appear exactly once.
 - "id" and "label" of original items must match EXACTLY.
 - For new detected items, use IDs starting with "detected_".
-- Budgets MUST sum to exactly ${total_budget:.2f}.
+- Total estimated cost MUST sum to exactly plus or minus 10% of ${total_budget:.2f}.
 - Return ONLY the JSON array, nothing else."""
 
         # Build contents
         contents = []
         if image_base64:
-            clean_b64 = image_base64.split(",")[1] if "," in image_base64 else image_base64
+            clean_b64 = image_base64.split(",")[1] if "," in image_base64 else image_base64 
             try:
                 img_data = base64.b64decode(clean_b64)
                 contents.append(types.Part.from_bytes(data=img_data, mime_type="image/png"))
